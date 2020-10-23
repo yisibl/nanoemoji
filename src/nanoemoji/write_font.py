@@ -26,7 +26,7 @@ from nanoemoji import codepoints
 from nanoemoji.colors import Color
 from nanoemoji.color_glyph import ColorGlyph, PaintedLayer
 from nanoemoji.glyph import glyph_name
-from nanoemoji.paint import Paint, PaintGlyph
+from nanoemoji.paint import CompositeMode, Paint, PaintComposite, PaintGlyph
 from nanoemoji.svg import make_svg_table
 from nanoemoji.svg_path import draw_svg_path
 from nanoemoji import util
@@ -36,7 +36,16 @@ from picosvg.svg import SVG
 from picosvg.svg_transform import Affine2D
 import regex
 import sys
-from typing import Callable, Generator, Iterable, Mapping, NamedTuple, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    Mapping,
+    NamedTuple,
+    Sequence,
+    Tuple,
+)
 from ufoLib2.objects import Component, Glyph
 import ufo2ft
 
@@ -309,7 +318,9 @@ def _glyf_ufo(ufo, color_glyphs):
             assert component.name == color_glyph.glyph_name
 
 
-def _colr_layer(colr_version: int, layer_glyph_name: str, paint: Paint, palette: Sequence[Color]):
+def _colr_layer(
+    colr_version: int, layer_glyph_name: str, paint: Paint, palette: Sequence[Color]
+):
     # For COLRv0, paint is just the palette index
     # For COLRv1, it's a data structure describing paint
     if colr_version == 0:
@@ -333,6 +344,30 @@ def _inter_glyph_reuse_key(painted_layer: PaintedLayer):
 
     COLR lets us reuse the shape regardless of paint so paint is not part of key."""
     return (painted_layer.path.d, painted_layer.reuses)
+
+
+def _build_composite_layer(layers: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+    """Construct PaintComposite binary tree from list of UFO color layers.
+
+    Layers are in z-order, from bottom to top layer. We use SRC_OVER compositing
+    mode to paint "source" over "backdrop". The binary tree is balanced to keep
+    its depth short and limit the risk of RecursionError.
+    """
+    assert layers
+
+    if len(layers) == 1:
+        return layers[0]
+
+    mid = len(layers) // 2
+    return dict(
+        format=PaintComposite.format,
+        mode=CompositeMode.SRC_OVER.name.lower(),
+        backdrop=_build_composite_layer(layers[:mid]),
+        source=_build_composite_layer(layers[mid:]),
+    )
+
+
+MAX_LAYER_V1_COUNT = 255
 
 
 def _colr_ufo(colr_version, ufo, color_glyphs):
@@ -379,6 +414,17 @@ def _colr_ufo(colr_version, ufo, color_glyphs):
 
             layer = _colr_layer(colr_version, glyph.name, painted_layer.paint, colors)
             glyph_colr_layers.append(layer)
+
+        if colr_version > 0 and len(glyph_colr_layers) > MAX_LAYER_V1_COUNT:
+            logging.info(
+                "%s contains > {MAX_LAYER_V1_COUNT} layers (%s); "
+                "merging last layers in PaintComposite tree",
+                color_glyph.glyph_name,
+                len(glyph_colr_layers),
+            )
+
+            i = MAX_LAYER_V1_COUNT - 1
+            glyph_colr_layers[i:] = [_build_composite_layer(glyph_colr_layers[i:])]
 
         colr_glyph = ufo.get(color_glyph.glyph_name)
         _draw_glyph_extents(ufo, colr_glyph)
