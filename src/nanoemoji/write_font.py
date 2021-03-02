@@ -162,6 +162,12 @@ def _make_ttfont(config, ufo, color_glyphs):
     if config.output_format == ".ufo":
         return None
 
+    import pprint
+    with open("pretty_colors.txt", "w") as f:
+        pp = pprint.PrettyPrinter(indent=2,stream=f)
+        pp.pprint(color_glyphs)
+    print("wrote pretty_colors.txt")
+
     # Use skia-pathops to remove overlaps (i.e. simplify self-overlapping
     # paths) because the default ("booleanOperations") does not support
     # quadratic bezier curves (qcurve), which may appear
