@@ -68,6 +68,13 @@ def test_default_version(svgs, color_format):
     assert ufo.info.versionMajor == 1
     assert ufo.info.versionMinor == 0
 
+    # https://unifiedfontobject.org/versions/ufo3/fontinfo.plist/#opentype-name-table-fields
+    openTypeNameVersion = ttfont["name"].getDebugName(5)
+    assert openTypeNameVersion == "Version 1.000"
+
+    openTypeNameUniqueID = ttfont["name"].getDebugName(3)
+    assert openTypeNameUniqueID == "1.000;NONE;UnitTest-Regular"
+
 
 @pytest.mark.parametrize("svgs", [("rect.svg", "one-o-clock.svg")])
 @pytest.mark.parametrize(
@@ -97,6 +104,12 @@ def test_version(svgs, color_format, version_major, version_minor):
 
     assert ufo.info.versionMajor == 16
     assert ufo.info.versionMinor == 28
+
+    openTypeNameVersion = ttfont["name"].getDebugName(5)
+    assert openTypeNameVersion == "Version 16.028"
+
+    openTypeNameUniqueID = ttfont["name"].getDebugName(3)
+    assert openTypeNameUniqueID == "16.028;NONE;UnitTest-Regular"
 
 
 # TODO test that width, height are removed from svg
